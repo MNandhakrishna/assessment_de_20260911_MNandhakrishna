@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: fct_city_daily
+    description: "Daily weather metrics by city for analytics and reporting."
+
+    columns:
+      - name: city
+        description: "City name."
+        tests:
+          - not_null
+
+      - name: date
+        description: "Weather observation date."
+        tests:
+          - not_null
+
+      - name: temperature_2m_max
+        description: "Daily maximum temperature in degrees Celsius."
+        tests:
+          - not_null
+
+      - name: temperature_2m_min
+        description: "Daily minimum temperature in degrees Celsius."
+        tests:
+          - not_null
+
+      - name: precipitation_sum
+        description: "Daily precipitation in millimetres."

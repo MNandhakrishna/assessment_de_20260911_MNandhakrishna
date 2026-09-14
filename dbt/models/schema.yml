@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: stg_weather
+    description: "Cleaned and typed daily weather data from the raw Open-Meteo source."
+
+    columns:
+      - name: city
+        description: "Configured city name."
+        tests:
+          - not_null
+
+      - name: latitude
+        description: "Latitude of the configured city."
+        tests:
+          - not_null
+
+      - name: longitude
+        description: "Longitude of the configured city."
+        tests:
+          - not_null
+
+      - name: date
+        description: "Weather observation date."
+        tests:
+          - not_null
+
+      - name: temperature_2m_max
+        description: "Daily maximum temperature at 2 metres in degrees Celsius."
+
+      - name: temperature_2m_min
+        description: "Daily minimum temperature at 2 metres in degrees Celsius."
+
+      - name: precipitation_sum
+        description: "Daily precipitation sum in millimetres."

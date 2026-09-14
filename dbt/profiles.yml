@@ -1,0 +1,13 @@
+weather_pipeline:
+  target: dev
+
+  outputs:
+    dev:
+      type: postgres
+      host: postgres
+      port: 5432
+      user: de
+      password: de
+      dbname: warehouse
+      schema: staging
+      threads: 2
