@@ -13,7 +13,9 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "cities.yml"
     retry=retry_if_exception_type(requests.exceptions.RequestException),
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=2, min=2, max=30),
+    reraise=True,
 )
+
 def get_weather(latitude, longitude, logical_date):
     params = {
         "latitude": latitude,
