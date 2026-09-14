@@ -1,105 +1,388 @@
-# Data Engineering Assessment
+# Weather Data Engineering Assessment
 
-Build **one small, working, end-to-end data pipeline** and walk us through it in a notebook.
-Scope is deliberately small: we want to see a pipeline that actually runs, is safe to re-run,
-and that you can explain. Nothing here needs to be "production scale".
+A small end-to-end weather data pipeline that extracts daily weather data from the Open-Meteo historical API, loads it into PostgreSQL, transforms it with dbt, and orchestrates the workflow with Apache Airflow.
 
-## The task
+## Architecture
 
-Daily weather for the cities in `config/cities.yml`, from the free
-[Open-Meteo archive API](https://open-meteo.com/en/docs/historical-weather-api) (no key),
-for the last 30 days.
-
+```text
+Open-Meteo Historical API
+          |
+          v
+     Airflow DAG
+          |
+          v
+   Python Extraction
+          |
+          v
+   PostgreSQL RAW
+   raw.weather_daily
+          |
+          v
+       dbt
+     /      \
+Staging     Mart
+   |          |
+   v          v
+stg_weather  fct_city_daily
+          |
+          v
+      Data Quality
+          |
+          v
+     Airflow Tests
 ```
-Open-Meteo API  ──extract──▶  raw.weather_daily (Postgres)
-                              │
-                              └──dbt──▶ staging.stg_weather ──▶ marts.fct_city_daily
-                                                          (tests + docs)
-                 Airflow DAG:  extract → load → dbt run → dbt test   (daily, backfillable)
-                 Notebook:     runs every stage, shows the results, explains the choices
+
+### Components
+
+* **Open-Meteo** — historical weather API
+* **Python** — extraction and loading
+* **PostgreSQL** — local warehouse
+* **dbt Core** — transformation and data quality tests
+* **Apache Airflow** — orchestration
+* **Jupyter** — reproducible walkthrough
+* **Docker Compose** — local reproducible environment
+
+## Project Structure
+
+```text
+.
+├── config/
+│   └── cities.yml
+├── dags/
+│   └── weather_pipeline.py
+├── dbt/
+│   ├── dbt_project.yml
+│   ├── profiles.yml
+│   ├── macros/
+│   └── models/
+│       ├── marts/
+│       └── staging/
+├── ingestion/
+│   ├── extract.py
+│   ├── load.py
+│   └── backfill.py
+├── notebooks/
+│   └── walkthrough.ipynb
+├── sql/
+│   └── init/
+├── docker/
+│   └── airflow.Dockerfile
+├── docker-compose.yml
+├── Makefile
+├── NOTES.md
+└── README.md
 ```
 
-### 1. Extract & load (Python)
+## Prerequisites
 
-- One run loads **one logical date** (and a helper can load a date range for backfill).
-- Re-running the same date must **not** duplicate rows. Choose a mechanism
-  (delete + insert, upsert, partition overwrite) and be ready to defend it.
-- Keep the API fields unmodified in the raw table; transformation belongs in dbt.
-- Timeouts and retries on the HTTP call.
+* Docker Desktop
+* Docker Compose
+* Git
+* `make` for the documented commands
 
-### 2. Transform (dbt)
+On Windows, the equivalent `docker compose` commands can be run directly from PowerShell if `make` is not installed.
 
-- Declare `raw.weather_daily` as a **source**.
-- A staging model that types and cleans the raw rows.
-- One mart, for example daily aggregates per city (`marts.fct_city_daily`).
-- Schema tests that would catch a real regression (keys, ranges, nulls), and descriptions
-  on models and columns.
+## Setup
 
-### 3. Orchestrate (Airflow)
+Clone the repository and enter the project directory.
 
-- One DAG: `extract → load → dbt run → dbt test`, scheduled daily.
-- Use the **logical date** (`{{ ds }}` / `data_interval_start`) so `airflow dags backfill`
-  works. No hard-coded "today".
-- Tasks are idempotent on rerun; sensible retries and timeouts.
-
-### 4. Walk through (notebook)
-
-`notebooks/walkthrough.ipynb` is how we read your solution. It must:
-
-1. Run each stage in order using the **same code the DAG uses** (import your functions or
-   trigger the DAG; do not re-implement the logic in the notebook).
-2. After each stage, show evidence: row counts, a few sample rows, dbt run/test output.
-3. Prove re-run safety: run the load for the same date twice and show counts are unchanged.
-4. Query the mart and show a result a business user would recognise.
-5. Explain, in short markdown cells, what each stage does and **why** you built it that way.
-
-Commit the notebook **with its outputs**. A notebook without outputs scores as not run.
-
-### 5. Notes
-
-Fill in `NOTES.md`: time spent, known gaps, and exactly what you used AI tools for.
-
-### Reproducibility
-
-We review by cloning your repository on a clean machine and running:
+Create the environment file:
 
 ```bash
 cp .env.example .env
-make up          # everything comes up
-make reproduce   # executes notebooks/walkthrough.ipynb headlessly
 ```
 
-`make reproduce` must succeed without manual steps. Run it yourself before submitting.
-
-## Rules on AI assistance
-
-You may use AI tools the way you would at work: to look things up, unblock yourself, review
-your own code. You may not have them build the solution for you. Be specific in `NOTES.md`.
-The follow-up interview goes through your code and notebook in detail.
-
-## How this is assessed
-
-Six dimensions, 0–5 each: extract & load, dbt modelling, orchestration, data quality,
-notebook walkthrough, code quality. A pipeline that visibly runs end to end matters more
-than any single feature. Commit history is visible to reviewers, so commit in steps.
-
-## Getting started
+Start the services:
 
 ```bash
-cp .env.example .env
-make up          # postgres, airflow (standalone), jupyter
-make airflow-ui  # http://localhost:8080  (admin / admin)
-make notebook    # http://localhost:8888  (JupyterLab, no token)
-make dbt         # dbt run inside the airflow container
-make reproduce   # execute the notebook headlessly (what reviewers run)
+make up
+```
+
+The main services are:
+
+* Airflow: `http://localhost:8080`
+* JupyterLab: `http://localhost:8888`
+* PostgreSQL: `localhost:5432`
+
+Airflow credentials for the local environment are:
+
+```text
+Username: admin
+Password: admin
+```
+
+## Pipeline
+
+The pipeline processes one logical date at a time.
+
+The Airflow DAG follows:
+
+```text
+extract → load → dbt_run → dbt_test
+```
+
+The DAG is scheduled daily at 06:00 UTC and uses the Airflow logical date rather than the current system date.
+
+The configured cities are maintained in:
+
+```text
+config/cities.yml
+```
+
+## Extraction
+
+The extraction layer calls the Open-Meteo historical weather API for each configured city.
+
+The following daily API fields are loaded:
+
+* `temperature_2m_max`
+* `temperature_2m_min`
+* `precipitation_sum`
+
+HTTP requests use:
+
+* 30-second timeout
+* retry handling for request failures
+* exponential backoff
+* handling for empty or invalid JSON responses
+
+## Loading and Idempotency
+
+Raw data is stored in:
+
+```text
+raw.weather_daily
+```
+
+The table uses:
+
+```text
+PRIMARY KEY (city, date)
+```
+
+Loads use PostgreSQL `ON CONFLICT DO UPDATE`, making the load idempotent.
+
+Rerunning the same logical date therefore does not create duplicate rows.
+
+## Backfill
+
+Historical dates can be loaded using the backfill helper:
+
+```bash
+docker compose exec airflow python -c "from ingestion.backfill import backfill_weather; backfill_weather('2026-08-13', '2026-09-11')"
+```
+
+The helper processes each date independently while using the same extraction and loading functions as the Airflow DAG.
+
+The assessment verification run covers:
+
+```text
+3 cities × 30 dates = 90 rows
+```
+
+## dbt
+
+The dbt project contains:
+
+### Source
+
+```text
+raw.weather_daily
+```
+
+### Staging
+
+```text
+staging.stg_weather
+```
+
+The staging model cleans and explicitly types the raw fields.
+
+### Mart
+
+```text
+marts.fct_city_daily
+```
+
+The mart provides daily weather metrics by city for analytics and reporting.
+
+Run dbt manually with:
+
+```bash
+make dbt
+```
+
+Run data quality tests:
+
+```bash
+make dbt-test
+```
+
+The project includes:
+
+* not-null tests
+* duplicate key regression test for `(city, date)`
+* temperature range validation
+* precipitation range validation
+
+## Airflow
+
+The DAG is:
+
+```text
+weather_pipeline
+```
+
+It runs:
+
+```text
+extract
+   ↓
+load
+   ↓
+dbt_run
+   ↓
+dbt_test
+```
+
+The DAG uses:
+
+* daily scheduling
+* logical dates
+* catchup/backfill support
+* task retries
+* execution timeouts
+* idempotent loading
+
+## Walkthrough Notebook
+
+The notebook is:
+
+```text
+notebooks/walkthrough.ipynb
+```
+
+It uses the same Python extraction and loading functions as the Airflow pipeline rather than reimplementing the pipeline logic.
+
+The walkthrough demonstrates:
+
+1. Configuration
+2. Extraction
+3. Raw loading
+4. Row counts and sample data
+5. Same-date rerun and idempotency
+6. dbt transformation
+7. dbt tests
+8. Querying the final mart
+
+To reproduce the notebook:
+
+```bash
+make reproduce
+```
+
+## Verification
+
+Check the raw table:
+
+```bash
+make psql
+```
+
+Then:
+
+```sql
+SELECT
+    MIN(date),
+    MAX(date),
+    COUNT(*),
+    COUNT(DISTINCT city),
+    COUNT(DISTINCT date)
+FROM raw.weather_daily;
+```
+
+For the assessment backfill, the expected result is:
+
+```text
+90 rows
+3 cities
+30 dates
+```
+
+Check the mart:
+
+```sql
+SELECT
+    MIN(date),
+    MAX(date),
+    COUNT(*),
+    COUNT(DISTINCT city),
+    COUNT(DISTINCT date)
+FROM marts.fct_city_daily;
+```
+
+Run all dbt tests:
+
+```bash
+make dbt-test
+```
+
+## Useful Commands
+
+Start services:
+
+```bash
+make up
+```
+
+Stop services:
+
+```bash
 make down
 ```
 
-The scaffold starts the services but contains **no pipeline logic**. Everything under
-`dags/`, `ingestion/`, `dbt/models/` and `notebooks/` is yours to write. Restructure as you
-like, as long as `make up` and `make reproduce` still work.
+View Airflow logs:
 
-## Submitting
+```bash
+make logs
+```
 
-Push to the default branch, open the portal, answer two short questions, and press Submit.
-Submission records the current commit and makes the repository read-only for you. Submit once.
+Run dbt:
+
+```bash
+make dbt
+```
+
+Run dbt tests:
+
+```bash
+make dbt-test
+```
+
+Open the database:
+
+```bash
+make psql
+```
+
+Reproduce the notebook:
+
+```bash
+make reproduce
+```
+
+## Reproducibility
+
+A clean environment can be started with:
+
+```bash
+cp .env.example .env
+make up
+make reproduce
+```
+
+The pipeline, dbt models, tests, Airflow DAG, and walkthrough are contained in the repository and run using Docker Compose.
+
+## Notes
+
+See [`NOTES.md`](NOTES.md) for time spent, known limitations, and AI-tool usage.

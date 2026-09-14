@@ -1,23 +1,25 @@
 # Notes
 
-## Time spent
+## Time Spent
 
-Roughly how many hours, and how it was split (setup / extract-load / dbt / airflow / notebook).
+Approximately 8–10 hours were spent on the assessment, including environment setup, pipeline implementation, debugging, testing, and documentation.
 
-## What I would do with more time
+## Known Gaps / Limitations
 
--
+* The pipeline currently uses PostgreSQL as the local warehouse for reproducibility.
+* The Open-Meteo archive API occasionally returned transient HTTP 500 responses during development. The extraction layer handles HTTP failures, timeouts, empty/invalid responses, and retries failed requests.
+* The current pipeline is designed for the configured cities in `config/cities.yml`.
+* The backfill helper processes one logical date at a time and is intended for historical backfills.
+* Production-scale deployment, secrets management, and cloud infrastructure are outside the scope of this assessment.
 
-## Known gaps
+## AI Tools Used
 
--
+ChatGPT (GPT-5.6 Luna) was used during development for:
 
-## AI-usage declaration
+* Understanding and clarifying the assessment requirements.
+* Reviewing the project structure and implementation approach.
+* Debugging Docker Compose, dbt, Airflow, and Python errors.
+* Explaining implementation patterns for incremental/idempotent loading, retries, dbt testing, and Airflow logical dates.
+* Reviewing code and suggesting improvements for robustness and reproducibility.
 
-Be specific. Examples of acceptable use: "asked ChatGPT how to configure dbt profiles for
-Postgres", "used Copilot for boilerplate in the API client". Examples of unacceptable
-use: "generated the DAG and dbt models from the brief".
-
-| Where (file / area) | What the tool did | What I changed afterwards |
-| --- | --- | --- |
-|  |  |  |
+The implementation was developed, tested, and verified locally. AI was used as a development and debugging aid rather than as a replacement for testing or verification.
