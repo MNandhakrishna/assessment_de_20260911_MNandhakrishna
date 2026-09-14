@@ -11,8 +11,8 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "cities.yml"
 
 @retry(
     retry=retry_if_exception_type(requests.exceptions.RequestException),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
 )
 def get_weather(latitude, longitude, logical_date):
     params = {
@@ -32,7 +32,17 @@ def get_weather(latitude, longitude, logical_date):
 
     response.raise_for_status()
 
-    return response.json()
+    if not response.content:
+        raise requests.exceptions.RequestException(
+            f"Open-Meteo returned an empty response for {logical_date}"
+        )
+
+    try:
+        return response.json()
+    except requests.exceptions.JSONDecodeError as exc:
+        raise requests.exceptions.RequestException(
+            f"Open-Meteo returned invalid JSON for {logical_date}"
+        ) from exc
 
 
 def extract_weather(logical_date):

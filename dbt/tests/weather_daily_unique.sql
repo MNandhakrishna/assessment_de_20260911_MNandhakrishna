@@ -1,0 +1,6 @@
+select
+    city,
+    date
+from {{ ref('fct_city_daily') }}
+group by city, date
+having count(*) > 1
