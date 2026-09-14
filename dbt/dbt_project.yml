@@ -8,9 +8,7 @@ model-paths: ["models"]
 
 models:
   weather_pipeline:
-    staging:
-      +schema: staging
-      +materialized: view
+    +materialized: view
 
     marts:
       +schema: marts
